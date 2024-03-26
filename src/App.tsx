@@ -1,9 +1,9 @@
 import { ChangeEvent, MouseEvent, useEffect, useState } from 'react';
-import { useContractRead } from 'wagmi';
+import { useReadContract } from 'wagmi';
 import { abi } from './contracts/swapERC20ABI';
 import { zeroAddress } from 'viem';
 import { CheckFunctionArgs, ParsedJsonParams, InputType } from '../types';
-import { validateJson } from './utilities/validateJson';
+import { validateAndHandleJsonErrors } from './utilities/validateAndHandleJsonErrors';
 import { displayErrors } from './utilities/displayErrors';
 import { twMerge } from 'tailwind-merge';
 import { Errors } from './components/Errors';
@@ -13,10 +13,12 @@ import { UrlForm } from './components/forms/UrlForm';
 import { Toggle } from './components/Toggle';
 import { SwapERC20 } from '@airswap/libraries';
 import { useDecompressedOrderFromUrl } from './hooks/useDecompressedOrderFromUrl';
-import { formatErrorsList } from './utilities/formatErrorsList';
 import { useJsonValues } from './hooks/useJsonValues';
-import { checkSmartContractError } from './utilities/checkSmartContractError';
+import { checkSmartContractGenericError } from './utilities/checkSmartContractGenericError';
 import { getOutputErrorsList } from './utilities/getOutputErrorsList';
+import { handleFormattedListErrors } from './utilities/handleFormattedErrorsList';
+import { parseJsonInput } from './utilities/parseJsonInput';
+import { handleSetErrors } from './utilities/handleSetErrors';
 
 function App() {
   const [inputType, setInputType] = useState<InputType>(InputType.JSON);
@@ -31,16 +33,19 @@ function App() {
   const [swapContractAddress, setSwapContractAddress] = useState<
     string | undefined
   >(undefined);
-  const [selectedChainId, setSelectedChainId] = useState<number | undefined>();
+  const [selectedChainId, setSelectedChainId] = useState<number>(1);
+  // if chainId is found in JSON, chainIdFromJson will be used and will override selectedChainId
+  const [chainIdFromJson, setChainIdFromJson] = useState<
+    number | string | undefined
+  >();
   const [errors, setErrors] = useState<string[]>([]);
   const [isEnableCheck, setIsEnableCheck] = useState(false);
   const [isNoErrors, setIsNoErrors] = useState(false);
 
-  const decompressedOrderFromUrl = useDecompressedOrderFromUrl(urlString);
-
-  const chainId = parsedJson?.chainId
-    ? Number(parsedJson?.chainId)
-    : selectedChainId;
+  const decompressedOrderFromUrl = useDecompressedOrderFromUrl({
+    inputType: inputType,
+    compressedOrder: urlString,
+  });
 
   const {
     senderWallet,
@@ -56,6 +61,7 @@ function App() {
     s,
   } = useJsonValues({ inputType, parsedJson, decompressedOrderFromUrl });
 
+  // gets passed into useContractRead for `check`
   const checkFunctionArgs: CheckFunctionArgs = [
     (senderWallet as `0x${string}`) || zeroAddress,
     nonce || BigInt(0),
@@ -74,174 +80,190 @@ function App() {
     data: checkFunctionData,
     isLoading: isLoadingCheck,
     error: errorCheck,
-  } = useContractRead({
-    chainId,
+  } = useReadContract({
+    chainId: selectedChainId,
     abi,
     address: swapContractAddress as `0x${string}`,
     functionName: 'check',
     args: checkFunctionArgs,
-    enabled: isEnableCheck,
+    query: {
+      enabled: !!isEnableCheck,
+    },
   });
 
-  const { data: protocolFee, isLoading: isLoadingProtocolFee } =
-    useContractRead({
-      chainId,
-      abi,
-      address: swapContractAddress as `0x${string}`,
-      functionName: 'protocolFee',
-    });
-
-  const { data: domainName } = useContractRead({
-    chainId,
+  const { data: protocolFee } = useReadContract({
+    chainId: selectedChainId,
     abi,
     address: swapContractAddress as `0x${string}`,
-    functionName: 'DOMAIN_NAME',
+    functionName: 'protocolFee',
   });
 
-  const { data: domainChainId } = useContractRead({
-    chainId,
+  const { data: eip712Domain } = useReadContract({
+    chainId: selectedChainId,
     abi,
     address: swapContractAddress as `0x${string}`,
-    functionName: 'DOMAIN_CHAIN_ID',
-  });
-
-  const { data: domainVersion } = useContractRead({
-    chainId,
-    abi,
-    address: swapContractAddress as `0x${string}`,
-    functionName: 'DOMAIN_VERSION',
+    functionName: 'eip712Domain',
+    query: {
+      staleTime: 86400000,
+    },
   });
 
   const handleChangeTextAreaJson = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    setIsEnableCheck(false);
     setJsonString(e.target.value);
   };
 
   const handleChangeTextAreaUrl = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    setIsEnableCheck(false);
-    setParsedJson(undefined);
     setUrlString(e.target.value);
   };
 
-  // Start of smaller functions used in handleSubmit
-  const handleJsonSubmission = () => {
-    const parsedJsonObject = jsonString && JSON.parse(jsonString);
-    setParsedJson(parsedJsonObject);
-    checkSmartContractError({ errorCheck, setErrors });
-  };
-
-  const handleUrlSubmission = () => {
-    const jsonString = JSON.stringify(decompressedOrderFromUrl);
-    const parsedJsonString = JSON.parse(jsonString);
-    setParsedJson(parsedJsonString);
-  };
-
-  const validateInputs = () => {
-    if (inputType === InputType.JSON && !jsonString) {
-      setErrors(['Input cannot be blank']);
-      return false;
+  // TODO: if JSON is toggled, clicking on JSON will toggle URL. We want to prevent this behavior. Add an id to the button component and check that against inputType
+  const handleToggle = (inputType: InputType) => {
+    if (inputType === InputType.URL) {
+      setInputType(InputType.JSON);
+    } else {
+      setInputType(InputType.URL);
     }
-    if (inputType === InputType.URL && !decompressedOrderFromUrl) {
-      setErrors([
-        'Something is wrong with your URL. Try copy-pasting it again',
-      ]);
-      return false;
-    }
-    return true;
   };
-  // End of functions used in handleSubmit
 
   const handleSubmit = (e: MouseEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setParsedJson(undefined);
     setIsEnableCheck(true);
-    setErrors([]);
-    setIsNoErrors(false);
 
-    if (!validateInputs()) {
+    // check if valid json format
+    const parsedJsonInput = parseJsonInput({
+      inputType,
+      jsonString,
+      decompressedOrderFromUrl,
+    });
+
+    if (parsedJsonInput instanceof Error) {
+      handleSetErrors({
+        isEnableCheck,
+        errors: [parsedJsonInput.toString()],
+        setErrors,
+      });
+
       return;
     }
-    try {
-      inputType === InputType.JSON
-        ? handleJsonSubmission()
-        : handleUrlSubmission();
-    } catch (e) {
-      console.error(e);
-      setErrors([`Error processing URL: ${e}`]);
-    }
-  };
 
-  const handleFormattedListErrors = (errorsList: string[] | undefined) => {
-    const formattedErrorsList = formatErrorsList(errorsList);
-
-    if (formattedErrorsList && formattedErrorsList.length > 0) {
-      setErrors((prevErrors) => {
-        const updatedErrors = [...prevErrors, ...formattedErrorsList];
-        const uniqueErrors = [...new Set(updatedErrors)];
-        return uniqueErrors;
-      });
-    }
-  };
-
-  // performs actions after parsedJSON has been updated
-  useEffect(() => {
-    const isJsonValid = validateJson({
-      json: parsedJson,
-      swapContractAddress: swapContractAddress,
-      chainId: selectedChainId,
+    // checks errors returned from smart contract to see if they're unhelpful, then returns a generic error
+    const genericSmartContractError = checkSmartContractGenericError({
+      errorCheck,
+      // setErrors,
     });
 
-    if (isJsonValid) {
-      setErrors((prevErrors) => {
-        const updatedErrors = [...prevErrors, ...isJsonValid];
-        const uniqueErrors = [...new Set(updatedErrors)];
-        return uniqueErrors;
+    if (genericSmartContractError) {
+      handleSetErrors({
+        isEnableCheck,
+        errors: [genericSmartContractError],
+        setErrors,
       });
     }
+  };
 
+  // handle programmatic changing of chainId
+  useEffect(() => {
+    const parsedJsonInput = parseJsonInput({
+      inputType,
+      jsonString,
+      decompressedOrderFromUrl,
+    });
+    if (parsedJsonInput) {
+      setParsedJson(parsedJsonInput);
+      setChainIdFromJson(parsedJsonInput?.chainId);
+    } else {
+      setParsedJson(undefined);
+      setChainIdFromJson(undefined);
+    }
+  }, [inputType, jsonString, decompressedOrderFromUrl]);
+
+  // handle programmatic changing of contract address
+  useEffect(() => {
+    const address = SwapERC20.getAddress(selectedChainId);
+    if (address) {
+      setSwapContractAddress(address);
+    }
+  }, [selectedChainId]);
+
+  // Update state when `handleToggle` is run
+  useEffect(() => {
+    if (inputType === InputType.JSON) {
+      setUrlString(undefined);
+    } else {
+      setJsonString(undefined);
+    }
+
+    setIsEnableCheck(false);
+    setIsNoErrors(false);
+    setErrors([]);
+  }, [inputType]);
+
+  // This prevents the checker from running when a user changes input but doesn't press submit input
+  useEffect(() => {
+    setIsEnableCheck(false);
+  }, [jsonString, urlString]);
+
+  // Initial validation and error handling after handleSubmit function changes `isEnabledCheck` to true
+  useEffect(() => {
+    if (!isEnableCheck) {
+      return;
+    }
+    // checks JSON errors, not smart contract errors
+    const validationErrors = validateAndHandleJsonErrors({
+      parsedJson,
+      swapContractAddress,
+      protocolFee,
+    });
+
+    if (validationErrors) {
+      handleSetErrors({
+        isEnableCheck,
+        errors: validationErrors,
+        setErrors,
+      });
+      // if !!validationErrors, end function. We don't want to check for smart contract errors until validationErrors is undefined, e.g. no errors
+      return;
+    }
+
+    // Check smart contract errors. If outputErrorsList has a length of 0, there are no errors
     const outputErrorsList = getOutputErrorsList(checkFunctionData);
+    if (outputErrorsList?.length === 0) {
+      // setting `isNoErrors` to true will cause Errors.tsx to render a "no errors" message
+      setIsNoErrors(true);
+      return;
+    }
 
-    // create array of human-readable errors
-    const errorsList = displayErrors({
+    const humanReadableErrors = displayErrors({
       errorsList: outputErrorsList,
-      requiredValues: {
-        domainChainId,
-        domainVerifyingContract: swapContractAddress,
-        domainName,
-        domainVersion,
-        protocolFee,
-      },
+      eip712Domain,
+      protocolFee,
     });
 
-    handleFormattedListErrors(errorsList);
+    const formattedErrors = handleFormattedListErrors({
+      errorsList: humanReadableErrors,
+    });
 
-    if (!isJsonValid && errorsList && errorsList.length === 0) {
-      setIsNoErrors(true);
-    }
+    handleSetErrors({
+      isEnableCheck,
+      errors: formattedErrors,
+      setErrors,
+    });
   }, [
-    chainId,
+    isEnableCheck,
     parsedJson,
-    checkFunctionData,
     swapContractAddress,
-    domainChainId,
-    domainName,
-    domainVersion,
     protocolFee,
-    selectedChainId,
+    setErrors,
+    checkFunctionData,
+    eip712Domain,
   ]);
-
-  useEffect(() => {
-    if (chainId) {
-      const address = SwapERC20.getAddress(chainId);
-      address && setSwapContractAddress(address);
-    }
-  }, [chainId, swapContractAddress]);
 
   return (
     <div className="flex flex-col font-sans">
       <Header
         protocolFee={protocolFee}
-        isLoadingProtocolFee={isLoadingProtocolFee}
+        setSelectedChainId={setSelectedChainId}
+        chainIdFromJson={chainIdFromJson}
       />
       <div
         id="container"
@@ -261,20 +283,7 @@ function App() {
           <div className="w-full sm:w-4/5 md:w-full lg:w-[90%] m-auto">
             <Toggle
               inputType={inputType}
-              clickTypeJson={() => {
-                setInputType(InputType.JSON);
-                setIsNoErrors(false);
-                setIsEnableCheck(false);
-                setErrors([]);
-              }}
-              clickTypeUrl={() => {
-                setInputType(InputType.URL);
-                setIsNoErrors(false);
-                // reset the following 2 values because they affect the behavior of `decompressedJson` in Dialog.tsx
-                setUrlString(undefined);
-                setIsEnableCheck(false);
-                setErrors([]);
-              }}
+              toggle={() => handleToggle(inputType)}
             />
 
             {inputType === InputType.JSON ? (
@@ -283,14 +292,13 @@ function App() {
                 handleChangeTextArea={handleChangeTextAreaJson}
                 isEnableCheck={isEnableCheck}
                 isLoading={isLoadingCheck}
-                setIsEnableCheck={setIsEnableCheck}
-                setSelectedChainId={setSelectedChainId}
               />
             ) : (
               <UrlForm
                 handleSubmit={handleSubmit}
                 handleChangeTextArea={handleChangeTextAreaUrl}
                 isEnableCheck={isEnableCheck}
+                setIsEnableCheck={setIsEnableCheck}
                 isLoading={isLoadingCheck}
                 parsedJson={parsedJson}
                 decompressedJson={decompressedJson}

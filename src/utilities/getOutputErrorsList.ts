@@ -1,9 +1,14 @@
 import { hexToString } from 'viem';
 
+/**
+ * @returns human readable errors from SwapERC20 `check` function
+ */
 export const getOutputErrorsList = (
-  checkFunctionData: readonly [bigint, readonly `0x${string}`[]] | undefined
+  checkFunctionData: readonly `0x${string}`[] | undefined
 ) => {
-  return checkFunctionData?.[1].map((error: `0x${string}`) => {
-    return hexToString(error);
-  });
+  if (!checkFunctionData) {
+    return undefined;
+  } else {
+    return checkFunctionData.map((error: `0x${string}`) => hexToString(error));
+  }
 };

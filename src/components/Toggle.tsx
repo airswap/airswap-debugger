@@ -3,12 +3,10 @@ import { Button } from './Button';
 
 export const Toggle = ({
   inputType,
-  clickTypeJson,
-  clickTypeUrl,
+  toggle,
 }: {
   inputType: InputType;
-  clickTypeJson: () => void;
-  clickTypeUrl: () => void;
+  toggle: () => void;
 }) => {
   return (
     <>
@@ -18,7 +16,7 @@ export const Toggle = ({
       <div className="flex flex-row mx-auto rounded-sm">
         <Button
           text="JSON"
-          clickAction={clickTypeJson}
+          clickAction={toggle}
           variant="toggle"
           className={`${
             inputType === InputType.JSON
@@ -28,7 +26,7 @@ export const Toggle = ({
         />
         <Button
           text="URL"
-          clickAction={clickTypeUrl}
+          clickAction={toggle}
           variant="toggle"
           className={`${
             inputType === InputType.URL

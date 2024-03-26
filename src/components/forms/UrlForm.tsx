@@ -7,6 +7,7 @@ export const UrlForm = ({
   handleSubmit,
   handleChangeTextArea,
   isEnableCheck,
+  setIsEnableCheck,
   isLoading,
   parsedJson,
   decompressedJson,
@@ -15,6 +16,7 @@ export const UrlForm = ({
   handleSubmit: (e: MouseEvent<HTMLFormElement>) => void;
   handleChangeTextArea: (e: ChangeEvent<HTMLTextAreaElement>) => void;
   isEnableCheck: boolean;
+  setIsEnableCheck: Dispatch<SetStateAction<boolean>>;
   isLoading: boolean;
   parsedJson: Partial<ParsedJsonParams> | undefined;
   decompressedJson: string | undefined;
@@ -58,6 +60,7 @@ export const UrlForm = ({
         decompressedJson={decompressedJson}
         setDecompressedJson={setDecompressedJson}
         isEnableCheck={isEnableCheck}
+        setIsEnableCheck={setIsEnableCheck}
       />
     </form>
   );

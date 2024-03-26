@@ -11,24 +11,30 @@ export const Dialog = ({
   decompressedJson,
   setDecompressedJson,
   isEnableCheck,
+  setIsEnableCheck,
 }: {
   inputButton: React.ReactNode;
   parsedJson: Partial<ParsedJsonParams> | undefined;
   decompressedJson: string | undefined;
   setDecompressedJson: Dispatch<SetStateAction<string | undefined>>;
   isEnableCheck: boolean;
+  setIsEnableCheck: Dispatch<SetStateAction<boolean>>;
 }) => {
   const [open, setOpen] = useState(false);
 
-  const handleCopyJson = async (decompressedJson: string | undefined) => {
+  const handleCopyCloseJson = async (decompressedJson: string | undefined) => {
     if (!decompressedJson) {
       return;
     }
     await navigator.clipboard.writeText(decompressedJson);
+    setIsEnableCheck(false);
     setOpen(false);
   };
 
-  const handleClose = () => setOpen(false);
+  const handleClose = () => {
+    setIsEnableCheck(false);
+    setOpen(false);
+  };
 
   useEffect(() => {
     if (!parsedJson) {
@@ -68,8 +74,8 @@ export const Dialog = ({
             <div className="flex justify-end gap-[25px]">
               <AlertDialog.Cancel asChild>
                 <Button
-                  text="copy json"
-                  clickAction={() => handleCopyJson(decompressedJson)}
+                  text="copy and close"
+                  clickAction={() => handleCopyCloseJson(decompressedJson)}
                   variant="dialog"
                 />
               </AlertDialog.Cancel>

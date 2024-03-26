@@ -1,10 +1,17 @@
 import { decompressFullOrderERC20 } from '@airswap/utils';
 import { FullOrderERC20 } from '@airswap/types';
+import { InputType } from '../../types';
 
-export const useDecompressedOrderFromUrl = (
-  compressedOrder: string | undefined
-): FullOrderERC20 | undefined => {
-  if (!compressedOrder) {
+export const useDecompressedOrderFromUrl = ({
+  inputType,
+  compressedOrder,
+}: {
+  inputType: InputType;
+  compressedOrder: string | undefined;
+}): FullOrderERC20 | undefined => {
+  if (inputType === InputType.JSON) {
+    return undefined;
+  } else if (!compressedOrder) {
     return undefined;
   } else {
     try {
@@ -18,7 +25,8 @@ export const useDecompressedOrderFromUrl = (
         return decompressedOrder;
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error: issue with decompressedOrderFromUrl');
+      return;
     }
   }
 };

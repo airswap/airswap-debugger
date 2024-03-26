@@ -10,7 +10,6 @@ export const chainIdOptions: SelectOptions = [
   { value: '42161', label: 'Arbitrum' },
   { value: '43114', label: 'Avalanche' },
   { value: '59144', label: 'Linea' },
-  { value: '5', label: 'Goerli' },
   { value: '31', label: 'RSK Testnet' },
   { value: '41', label: 'TelosEVM Testnet' },
   { value: '97', label: 'BSC Testnet' },

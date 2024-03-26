@@ -1,15 +1,26 @@
 import { isAddress } from 'viem';
-import { ChainIds, ParsedJsonParams } from '../../types';
+import { ParsedJsonParams } from '../../types';
+import { ChainIds } from '../../tools/constants';
 
-export const validateJson = ({
-  json,
+/**
+ *
+ * @remarks this function does not check for errors returned from the smart contract, it only checks for valid JSON inputs
+ * @param parsedJson is the JSON that is being checked for errors
+ * @returns a list of errors, or undefined. Undefined indicates that no errors are found
+ */
+export const validateAndHandleJsonErrors = ({
+  parsedJson,
   swapContractAddress,
-  chainId,
+  protocolFee,
 }: {
-  json: Partial<ParsedJsonParams> | undefined;
+  parsedJson: Partial<ParsedJsonParams> | undefined;
   swapContractAddress: string | undefined;
-  chainId: number | undefined;
-}): string[] | false => {
+  protocolFee: bigint | undefined;
+}): string[] | undefined => {
+  if (!parsedJson) {
+    return;
+  }
+
   const errorsList: string[] = [];
   try {
     const requiredKeys: (keyof ParsedJsonParams)[] = [
@@ -31,68 +42,82 @@ export const validateJson = ({
       !/^(0x)?[0-9a-fA-F]{64}$/.test(jsonKey);
     const isUint8 = (v: string) =>
       !/^(0|[1-9]\d?|1\d\d|2[0-4]\d|25[0-5])$/.test(v);
+    const chainIdList = Object.keys(ChainIds);
 
     // Check for valid values
-    if (json) {
-      if (!json['chainId'] && !chainId) {
-        errorsList.push(
-          'chainId: double check your chain id. Either select one in the dropdown, or enter "chainId" and its value into your JSON'
-        );
+    if (parsedJson) {
+      if (
+        parsedJson['chainId'] &&
+        !chainIdList.includes(parsedJson['chainId'].toString())
+      ) {
+        errorsList.push('chainId: double check your chain id');
       }
-      if (json['senderWallet'] && !isAddress(json['senderWallet'])) {
+      if (
+        parsedJson['senderWallet'] &&
+        !isAddress(parsedJson['senderWallet'])
+      ) {
         errorsList.push('senderWallet must be a valid ERC20 address');
       }
-      if (json['nonce'] && isNotValidNumberString(json['nonce'].toString())) {
+      if (
+        parsedJson['nonce'] &&
+        isNotValidNumberString(parsedJson['nonce'].toString())
+      ) {
         errorsList.push(
           'nonce: must be a number. Make sure it\'s wrapped in quotation marks, e.g. "99"'
         );
       }
-      if (json['expiry'] && isNotValidNumberString(json['expiry'])) {
+      if (
+        parsedJson['expiry'] &&
+        isNotValidNumberString(parsedJson['expiry'])
+      ) {
         errorsList.push(
           'expiry: must be a number. Make sure it\'s wrapped in quotation marks, e.g. "1566941284"'
         );
       }
-      if (json['signerWallet'] && !isAddress(json['signerWallet'])) {
+      if (
+        parsedJson['signerWallet'] &&
+        !isAddress(parsedJson['signerWallet'])
+      ) {
         errorsList.push('signerWallet: must be a valid ERC20 address');
       }
-      if (json['signerToken'] && !isAddress(json['signerToken'])) {
+      if (parsedJson['signerToken'] && !isAddress(parsedJson['signerToken'])) {
         errorsList.push('signerToken: must be a valid ERC20 address');
       }
       if (
-        json['signerAmount'] &&
-        isNotValidNumberString(json['signerAmount'])
+        parsedJson['signerAmount'] &&
+        isNotValidNumberString(parsedJson['signerAmount'])
       ) {
         errorsList.push(
-          'signerAmount: must be a number. Make sure it\'s wrapped in quotation marks, e.g. "100000000"'
+          'signerAmount: must be a number string. (a number wrapped in quotes, e.g. "100000000")'
         );
       }
-      if (json['senderToken'] && !isAddress(json['senderToken'])) {
+      if (parsedJson['senderToken'] && !isAddress(parsedJson['senderToken'])) {
         errorsList.push('senderToken: must be a valid ERC20 address');
       }
       if (
-        json['senderAmount'] &&
-        isNotValidNumberString(json['senderAmount'])
+        parsedJson['senderAmount'] &&
+        isNotValidNumberString(parsedJson['senderAmount'])
       ) {
         errorsList.push(
           'senderAmount: must be a number. Make sure it\'s wrapped in quotation marks, e.g. "100000000"'
         );
       }
-      if (json['v'] && isUint8(json['v'])) {
+      if (parsedJson['v'] && isUint8(parsedJson['v'])) {
         errorsList.push(`v: must be a value between 0-255.`);
       }
-      if (json['r'] && isBytes32(json['r'])) {
+      if (parsedJson['r'] && isBytes32(parsedJson['r'])) {
         errorsList.push(
           `r: must be bytes32, a 64-character hex value, e.g. '0x1a2b...c9d0'.`
         );
       }
-      if (json['s'] && isBytes32(json['s'])) {
+      if (parsedJson['s'] && isBytes32(parsedJson['s'])) {
         errorsList.push(
           `s: must be bytes32, a 64-character hex value, e.g. '0x4c1g...j4a0'.`
         );
       }
-      if (json['chainId']) {
+      if (parsedJson['chainId']) {
         const isValidChainId = Object.values(ChainIds).includes(
-          Number(json['chainId'])
+          Number(parsedJson['chainId'])
         );
         if (!isValidChainId) {
           errorsList.push(
@@ -100,35 +125,45 @@ export const validateJson = ({
           );
         }
       }
-      if (json['swapContract'] && !isAddress(json['swapContract'])) {
+      if (
+        parsedJson['swapContract'] &&
+        !isAddress(parsedJson['swapContract'])
+      ) {
         // first check if valid ERC20 address
         errorsList.push('swapContract: must be a valid ERC20 address');
         // then check if address is correct
-        if (json['swapContract'] !== swapContractAddress) {
+        if (parsedJson['swapContract'] !== swapContractAddress) {
           errorsList.push(`swapContract: SwapERC20 address is not valid.`);
         }
+      }
+      if (
+        parsedJson['protocolFee'] &&
+        parsedJson['protocolFee'] !== Number(protocolFee).toString()
+      ) {
+        errorsList.push(
+          `protocolFee: protocol fee should be ${Number(protocolFee)}`
+        );
       }
     }
 
     // Check for missing keys
-    const missingKeys = requiredKeys.filter((key) => json && !json[key]);
+    const missingKeys = requiredKeys.filter(
+      (key) => parsedJson && !parsedJson[key]
+    );
 
     missingKeys.forEach((missingKey) => {
       errorsList.push(`JSON is missing an "${missingKey}" key and its value.`);
     });
 
+    console.log('json errors (not SC errors)', errorsList);
+
     if (errorsList.length === 0) {
-      // false means there are no errors here
-      return false;
+      return undefined;
     } else {
       return errorsList;
     }
-  } catch (e) {
-    console.error(e);
-    errorsList.push(
-      'An unexpected error occurred in the validateJson function.'
-    );
-
-    return errorsList;
+  } catch (error) {
+    console.error('error in validateJson function', error);
+    return [String(error)];
   }
 };

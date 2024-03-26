@@ -12,6 +12,7 @@ export const useJsonValues = ({
 }) => {
   const json =
     inputType === InputType.JSON ? parsedJson : decompressedOrderFromUrl;
+
   const senderWallet = json?.senderWallet;
   const nonce = isNaN(Number(json?.nonce))
     ? BigInt(0)

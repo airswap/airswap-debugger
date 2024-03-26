@@ -1,22 +1,16 @@
 import { ChangeEvent, MouseEvent } from 'react';
 import { textareaPlaceholder } from '../../placeholders/textareaJsonPlaceholder';
-import { Select } from '../Select';
-import { chainIdOptions } from '../../utilities/chainIdOptions';
 
 export const JsonForm = ({
   handleSubmit,
   handleChangeTextArea,
   isEnableCheck,
   isLoading,
-  setIsEnableCheck,
-  setSelectedChainId,
 }: {
   handleSubmit: (e: MouseEvent<HTMLFormElement>) => void;
   handleChangeTextArea: (e: ChangeEvent<HTMLTextAreaElement>) => void;
   isEnableCheck: boolean;
   isLoading: boolean;
-  setIsEnableCheck: (value: boolean) => void;
-  setSelectedChainId: (value: number) => void;
 }) => {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col m-auto w-full">
@@ -27,13 +21,6 @@ export const JsonForm = ({
         >
           Paste JSON below:
         </label>
-        <div>
-          <Select
-            setIsEnableCheck={setIsEnableCheck}
-            setSelectedChainId={setSelectedChainId}
-            selectOptions={chainIdOptions}
-          />
-        </div>
       </div>
       <textarea
         id="jsonInput"
